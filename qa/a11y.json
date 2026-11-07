@@ -1,0 +1,12 @@
+{
+  "screens": [
+    { "name": "今日の5問", "click": ["#go-d"] },
+    { "name": "とことん", "click": ["#go-e"] },
+    { "name": "上級", "click": ["#go-h"] },
+    { "name": "練習", "click": ["#go-p"] },
+    { "name": "歌の帳", "click": ["#go-dex"] },
+    { "name": "実績", "click": ["#go-ach"] },
+    { "name": "カレンダー", "click": ["#go-cal"] },
+    { "name": "このゲームについて", "click": ["#f-about"] }
+  ]
+}
