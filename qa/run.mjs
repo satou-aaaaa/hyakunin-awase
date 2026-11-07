@@ -19,7 +19,7 @@ const req = createRequire(import.meta.url);
 const UTA = req(path.join(root, "data.js"));
 const G = req(path.join(root, "game.js"));
 const idOf = (t) => t.split("|")[0].split(":")[1];
-{ let ng = false; try { G.make("0:t2|x2026-11-07"); } catch (e) { ng = true; } check("難しさと問題の合わないタグは作らない", ng); }
+{ let ng = false; const tid = G.POOL[2][0]; try { G.make(`0:${tid}|x2026-11-07`); } catch (e) { ng = true; } check("難しさと問題の合わないタグは作らない（実在する問題で）", !!G.QBY[tid] && ng); }
 
 // ---- 1. 歌のデータと決まり字（ブラウザを使わない）----
 {
