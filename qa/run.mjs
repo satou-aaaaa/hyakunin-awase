@@ -40,13 +40,17 @@ const idOf = (t) => t.split("|")[0].split(":")[1];
   check("よく知られた歌が番号どおり（1 天智天皇・2 持統天皇・17 在原業平・18 藤原敏行・57 紫式部・62 清少納言・9 小野小町・100 順徳院）", Object.entries(known).every(([n, [au, k]]) => UTA[n - 1][0] === au && UTA[n - 1][4].startsWith(k)));
 
   // 決まり字を、game.js とは別の数え方で数え直す：読む音に直してから並べ、となりどうしの同じ所の長さ＋1
-  const snd = (k) => k.split(" ").map((ph) => [...ph].map((c, i) => ({ ゐ: "い", ゑ: "え", を: "お", ぢ: "じ", づ: "ず" }[c] || (i > 0 && { は: "わ", ひ: "い", ふ: "う", へ: "え", ほ: "お" }[c]) || c)).join("")).join("");
+  const snd = (k) => k.split(" ").map((ph) => [...ph].map((c, i) => ({ ゐ: "い", ゑ: "え", を: "お", ぢ: "じ", づ: "ず" }[c] || (i > 0 && { は: "わ", ひ: "い", ふ: "う", へ: "え", ほ: "お" }[c]) || c)).join("").replace(/^(あう|おう)/, "おお")).join("");
   const S = UTA.map((u, i) => ({ no: i + 1, s: snd(u[4]) })).sort((a, b) => (a.s < b.s ? -1 : 1)), lcp = (a, b) => { let n = 0; while (a[n] && a[n] === b[n]) n++; return n; };
   const kn = {}; S.forEach((x, i) => { kn[x.no] = Math.max(i ? lcp(S[i - 1].s, x.s) : 0, i < 99 ? lcp(x.s, S[i + 1].s) : 0) + 1; });
   const diff = G.POEMS.filter((p) => p.kn !== kn[p.no]).map((p) => `${p.no}:${p.kn}/${kn[p.no]}`);
   check("決まり字の字数を、別の数え方（並べてとなりと比べる）で数え直すと100首とも同じ", diff.length === 0, diff.join(","));
   const one = G.POEMS.filter((p) => p.kn === 1).map((p) => G.sound(p.uh)[0]).sort().join("");
   check("1字決まりは「む・す・め・ふ・さ・ほ・せ」の7首（Wikipedia「決まり字」）", one === [..."むすめふさほせ"].sort().join(""), one);
+  // 字数ごとの数：1字7・2字42・3字37・4字6・5字2・6字6（Wikipedia「決まり字」・競技かるたの札の分け方。44番「あふことの」は「おう」と読み「あふこ」の3字）
+  const cnt = [1, 2, 3, 4, 5, 6].map((k) => G.POEMS.filter((p) => p.kn === k).length).join(",");
+  check("決まり字の字数ごとの数は 1字7・2字42・3字37・4字6・5字2・6字6", cnt === "7,42,37,6,2,6", cnt);
+  check("44番「あふことの」は「おう」と読むので、おほえやま（60）・おほけなく（95）の友札で「あふこ」の3字決まり", G.BY[44].kima === "あふこ" && G.BY[44].tomo.join() === "60,95" && G.BY[60].tomo.includes(44));
   const six = G.POEMS.filter((p) => p.kn === 6).map((p) => p.no).sort((a, b) => a - b).join(",");
   check("6字決まり（大山札）は あさぼらけ（31・64）・きみがため（15・50）・わたのはら（11・76）の6首", six === "11,15,31,50,64,76", six);
   check("決まり字の字数は1〜6・どの歌も決まり字の前までは友札と同じ音・決まり字ではほかと分かれる", G.POEMS.every((p) => p.kn >= 1 && p.kn <= 6 && p.tomo.every((n) => G.BY[n].snd.slice(0, p.kn - 1) === p.snd.slice(0, p.kn - 1)) && G.POEMS.every((q) => q === p || q.snd.slice(0, p.kn) !== p.snd.slice(0, p.kn)) && (p.kn === 1) === (p.tomo.length === 0)));
@@ -98,7 +102,7 @@ const idOf = (t) => t.split("|")[0].split(":")[1];
 }
 // ---- 2. ファイルの中身 ----
 const html = readFileSync(path.join(root, "index.html"), "utf8"), game = readFileSync(path.join(root, "game.js"), "utf8");
-const ext = [...html.matchAll(/(?:src|href)="(https?:[^"]+)"/g)].map((m) => m[1]).filter((u) => !/^https:\/\/fonts\.googleapis\.com(\/|$)|^https:\/\/ko-fi\.com\/satouaaaaa$|^https:\/\/www\.mext\.go\.jp\/|^https:\/\/ja\.(wikisource|wikipedia)\.org\/wiki\/|^https:\/\/www\.ogurasansou\.co\.jp\/site\/hyakunin\/$/.test(u));
+const ext = [...html.matchAll(/(?:src|href)="(https?:[^"]+)"/g)].map((m) => m[1]).filter((u) => !/^https:\/\/fonts\.googleapis\.com(\/|$)|^https:\/\/ko-fi\.com\/satouaaaaa$|^https:\/\/www\.mext\.go\.jp\/|^https:\/\/ja\.(wikisource|wikipedia)\.org\/wiki\/|^https:\/\/www\.ogurasansou\.co\.jp\/site\/hyakunin\/$|^https:\/\/karutalife\.sakura\.ne\.jp\/learn\/fuda\.php$/.test(u));
 check("外から読むのは文字（Google Fonts）だけ。スクリプト・広告・解析を入れない（出典のリンクは押したときに開くだけ）", ext.length === 0 && ![...html.matchAll(/<script[^>]+src="([^"]+)"/g)].some((m) => /^https?:/.test(m[1])), ext.join(","));
 check("CSP で通信先を自分だけにしている", /connect-src 'self'/.test(html) && !/connect-src[^;"]*https/.test(html));
 check("Math.random は練習・とことんの並び・回の名札だけ（今日の5問・上級・札の並びは日付と問題の乱数。game.js には無い）", (html.match(/Math\.random/g) || []).length === 2 && !/Math\.random/.test(game.replace(/^\s*\/\/.*$/gm, "")));
