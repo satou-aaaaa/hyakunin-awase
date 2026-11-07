@@ -273,6 +273,7 @@ try {
   check("まちがいのある日は Ko-fi の一言を出さない", await p.locator(".kofi").count() === 0);
   check("結果に「あと少しの実績」と、続けて遊ぶ・上級のボタン・問題ごとの歌と決まり字", await p.locator("#achnext").count() === 1 && await p.locator("#go-e").count() === 1 && await p.locator("#go-h").count() === 1 && await p.locator(".rlist > div").count() === 5 && (await p.textContent(".rlist")).includes("決まり字"));
   check("歌の帳に取った歌が載る（5首）", Object.keys(s1.dex).length === 5);
+  check("まちがえた・ヒントを使った問題だけが、にがて（ng）に入る", JSON.stringify(Object.keys(s1.ng || {}).sort()) === JSON.stringify(tags.filter((_, j) => s1.days[TODAY].m[j] > 0).map(idOf).sort()), JSON.stringify(s1.ng));
   await p.click("#back");
   check("今日を終えたら、ホームは「今日の結果を見る」", (await p.textContent("#go-d")).includes("結果"));
   // 上級：ヒントなし・3問
@@ -281,6 +282,18 @@ try {
   for (let i = 0; i < 3; i++) { await solve(p); await p.click("#next"); }
   await p.waitForTimeout(150);
   check("上級の記録は hdays に入る", (await mem(p)).hdays[TODAY]?.m.length === 3);
+  // にがて復習：まちがえた問題を先に5問。まちがいなしで当てると外れる
+  await p.click("#back");
+  { const ng0 = Object.keys((await mem(p)).ng);
+    check("ホームに「にがて復習」とまちがえた問題の数", ng0.length > 0 && (await p.textContent("#go-r")).includes(`${ng0.length}問`));
+    await p.click("#go-r");
+    const rl = await p.evaluate(() => __hy.load().runs.p.list.map((t) => t.split("|")[0].split(":")[1]));
+    check("にがて復習は、まちがえた問題を全部入れた5問（ほかはまだの問題で補う）", rl.length === 5 && new Set(rl).size === 5 && ng0.every((q) => rl.includes(q)), rl.join());
+    for (let i = 0; i < 5; i++) { await solve(p); await p.click("#next"); }
+    await p.waitForTimeout(150);
+    const ng1 = (await mem(p)).ng;
+    check("にがて復習でまちがいなしに当てた問題は、にがてから外れる・ボタンも消える", Object.keys(ng1).length === 0 && await p.locator("#go-r").count() === 0, JSON.stringify(ng1));
+    check("にがて復習は今日の記録を変えない", (await mem(p)).days[TODAY].m.join() === s1.days[TODAY].m.join()); }
   // 練習：記録を増やさない
   await p.click("#back"); await p.click("#go-p"); await p.click('[data-t="1"]');
   const before = await mem(p);
