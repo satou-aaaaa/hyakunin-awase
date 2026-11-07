@@ -32,17 +32,21 @@
   // やさしい（u）：上の句を全部読む → 下の句の札を4枚から
   // ふつう（k）：決まり字だけ読む → 下の句の札を4枚から（ほかの3枚は、はじめの字がちがう歌）
   // むずかしい（t）：決まり字だけ読む → 友札（途中まで同じ音の歌）をまぜた4枚から（2字決まり以上の歌）
+  // 2026-11-07 足した問題（最後に足すだけ。問題の id は記録に残る）
+  // ふつう（a）：歌を全部読む → 詠んだ人を4人から（作者あて）
+  // むずかしい（r）：取り札（下の句）を見る → その歌の決まり字を、友札の決まり字をまぜた4つから（競技かるたで札を覚える練習。2字決まり以上の歌）
   const KIND = ["u", "k", "t"];
   const QS = [], QBY = {}, POOL = [[], [], []];
-  for (let lv = 0; lv < 3; lv++) for (const p of POEMS) {
-    if (lv === 2 && p.kn < 2) continue;
-    const id = KIND[lv] + p.no, q = { id, lv, no: p.no }; QS.push(q); QBY[id] = q; POOL[lv].push(id);
-  }
+  const addQ = (kd, lv, p) => { const id = kd + p.no, q = { id, lv, no: p.no, kd }; QS.push(q); QBY[id] = q; POOL[lv].push(id); };
+  for (let lv = 0; lv < 3; lv++) for (const p of POEMS) { if (lv === 2 && p.kn < 2) continue; addQ(KIND[lv], lv, p); }
+  for (const p of POEMS) addQ("a", 1, p);
+  for (const p of POEMS) if (p.kn >= 2) addQ("r", 2, p);
   // 選び肢の札（4枚）：問題の id から決まる（だれでも同じ）
   function optsOf(id) {
     const q = QBY[id], p = BY[q.no], R = rng(seedOf("opt:" + id)), others = POEMS.filter((x) => x !== p);
     let pick;
-    if (q.lv === 2) {
+    if (q.kd === "a") pick = shuffled(others, R).slice(0, 3);
+    else if (q.lv === 2) {
       // 友札 → はじめの音が同じ歌（近い順）→ そのほか
       const near = (x) => { let n = 0; while (n < x.snd.length && x.snd[n] === p.snd[n]) n++; return n; };
       const byNear = shuffled(others, R).sort((a, b) => near(b) - near(a));
@@ -55,7 +59,7 @@
   function make(tag) {
     const m = String(tag).match(/^([012]):([a-z0-9]+)\|/); if (!m || !QBY[m[2]] || QBY[m[2]].lv !== +m[1]) throw new Error("知らない問題 " + tag);
     const q = QBY[m[2]], opts = optsOf(q.id);
-    return { tag, lv: q.lv, id: q.id, p: BY[q.no], opts: opts.map((n) => BY[n]), ans: opts.indexOf(q.no) };
+    return { tag, lv: q.lv, kd: q.kd, id: q.id, p: BY[q.no], opts: opts.map((n) => BY[n]), ans: opts.indexOf(q.no) };
   }
   // 答えのあとに出す説明（決まり字の分かれ目）
   function facts(P) {

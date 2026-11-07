@@ -62,7 +62,8 @@ const idOf = (t) => t.split("|")[0].split(":")[1];
     const P = G.make(`${q.lv}:${q.id}|q2027-01-01`), why = [];
     if (P.opts.length !== 4 || new Set(P.opts.map((x) => x.no)).size !== 4) why.push("4枚");
     if (P.opts[P.ans] !== P.p || P.opts.filter((x) => x === P.p).length !== 1) why.push("答え");
-    if (q.lv === 1 && P.opts.some((x) => x !== P.p && x.snd[0] === P.p.snd[0])) why.push("ふつうに同じはじめの音");
+    if (q.kd === "k" && P.opts.some((x) => x !== P.p && x.snd[0] === P.p.snd[0])) why.push("ふつうに同じはじめの音");
+    if (q.id[0] !== q.kd || !"uktar".includes(q.kd)) why.push("種類");
     if (q.lv === 2 && (P.p.kn < 2 || !P.p.tomo.every((n) => P.opts.some((x) => x.no === n) || P.p.tomo.length > 3))) why.push("友札が入らない");
     if (q.lv === 2 && !P.opts.some((x) => x !== P.p && x.snd[0] === P.p.snd[0])) why.push("むずかしいに同じはじめの音が無い");
     if (JSON.stringify(G.optsOf(q.id)) !== JSON.stringify(G.optsOf(q.id))) why.push("毎回同じにならない");
@@ -71,7 +72,9 @@ const idOf = (t) => t.split("|")[0].split(":")[1];
   }
   check(`問題（${G.QS.length}）：札は4枚・答えはちょうど1枚・ふつうはほかの札のはじめの音がちがう・むずかしいは友札（3枚まで全部）が入る`, bad.length === 0, bad.slice(0, 5).join(" / "));
   check("答えの札の場所は1〜4番に散らばる（どこも15%以上）", pos.every((n) => n / G.QS.length > 0.15), String(pos));
-  check("問題の数：やさしい100・ふつう100・むずかしい93（2字決まり以上）", G.POOL.map((x) => x.length).join() === "100,100,93");
+  check("問題の数：やさしい100・ふつう200（下の句100・作者あて100）・むずかしい186（友札93・決まり字あて93、2字決まり以上）", G.POOL.map((x) => x.length).join() === "100,200,186");
+  check("作者あて：100首の作者は重ならない・選び肢は4人とも別の人", new Set(G.POEMS.map((p) => p.au)).size === 100 && G.POOL[1].filter((q) => q[0] === "a").every((q) => new Set(G.make(`1:${q}|q2027-01-01`).opts.map((x) => x.au)).size === 4));
+  check("決まり字あて：選び肢の決まり字は4つとも別で、友札の決まり字が入る", G.POOL[2].filter((q) => q[0] === "r").every((q) => { const P = G.make(`2:${q}|q2027-01-01`); return new Set(P.opts.map((x) => x.kima)).size === 4 && P.p.tomo.some((n) => P.opts.some((x) => x.no === n)); }));
   const long = [];
   for (const q of G.QS) for (const f of G.facts(G.make(`${q.lv}:${q.id}|q2027-01-01`))) if ([...f].length > 90) long.push(q.id + ":" + f);
   check("説明は1行90字以内（一画面一問）", long.length === 0, long.slice(0, 3).join(" / "));
@@ -254,6 +257,14 @@ try {
   {
     // ふつう：読み札は決まり字だけ。ヒント1で上の句を全部、ヒント2でまちがいの札を2枚外す
     const P2 = G.make(tags[2]);
+    if (P2.kd === "a") {
+      // その日のふつうが作者あてのとき：歌は全部見せ、ヒントは1回ごとに1人外す
+      check("ふつう（作者あて）の読み札は歌を全部見せる", (await p.textContent("#yomi")).includes(P2.p.up));
+      await p.click("#hint"); await p.click("#hint");
+      check("ふつう（作者あて）のヒント2回でまちがいの人を2人外す", await p.locator("#pick button.cut").count() === 2);
+      await p.reload(); await p.waitForTimeout(150); await p.click("#go-d");
+      check("ヒントを使ったあと開き直しても、外した人のまま", await p.locator("#pick button.cut").count() === 2);
+    } else {
     check("ふつうの読み札は決まり字だけ（上の句の残りは出さない）", (await p.textContent("#yomi")).includes(P2.p.kima) && !(await p.textContent("#yomi")).includes(P2.p.up) && (await p.getAttribute("#yomi .kima", "aria-label")).includes(P2.p.kima));
     await p.click("#hint");
     check("ふつうのヒント1は上の句を全部見せる（札は外さない）", (await p.textContent("#yomi")).includes(P2.p.up) && await p.locator("#pick button.cut").count() === 0);
@@ -261,6 +272,7 @@ try {
     check("ふつうのヒント2はまちがいの札を2枚外す", await p.locator("#pick button.cut").count() === 2);
     await p.reload(); await p.waitForTimeout(150); await p.click("#go-d");
     check("ヒントを使ったあと開き直しても、上の句と外した札のまま", (await p.textContent("#yomi")).includes(P2.p.up) && await p.locator("#pick button.cut").count() === 2);
+    }
     await solve(p); await p.click("#next");
   }
   for (let i = 3; i < 5; i++) { await solve(p); await p.click("#next"); }
@@ -335,6 +347,28 @@ try {
   }
   await p.click("#quit"); await p.waitForTimeout(150);
   check("「ここで降りる」で終わり、自己ベスト（3枚）とまちがい・ヒントの数が出る", (await mem(p)).ebest === 3 && (await p.textContent("#eres")).includes("3枚") && (await p.textContent("#ebest")).includes("2回"));
+  {
+    // 作者あて・決まり字あて：選び肢の形・まちがいの知らせ・ヒントで1つずつ外す・取れる
+    const q = await newPage(); await closeHow(q);
+    // 問題の id はデータから選ぶ（決まり字あては2字決まり以上の歌だけ。写した id がこのゲームに無いと検査が何も見ない。shukujitsu-yurai #1）
+    const aq = G.POOL[1].find((x) => x[0] === "a"), rq = G.POOL[2].find((x) => x[0] === "r");
+    check("作者あて・決まり字あての問題がある", !!aq && !!rq);
+    await q.evaluate(([aq, rq]) => { const k = __hy.todayKey(); __hy.save((s) => { s.runs.p = { mode: "p", id: "kk", date: k, list: [`1:${aq}|p${k}.k.0`, `2:${rq}|p${k}.k.1`, `0:u1|p${k}.k.2`, `0:u2|p${k}.k.3`, `0:u3|p${k}.k.4`], res: [], cur: null }; }); __hy.play("p"); }, [aq, rq]);
+    await q.waitForTimeout(150);
+    const A = await q.evaluate(() => { const P = __hy.cur().P; return { ask: document.querySelector(".ask").textContent, names: [...document.querySelectorAll("#pick button b")].map((b) => b.textContent), au: P.opts.map((o) => o.au), ans: P.ans, yomi: document.querySelector("#yomi").textContent, up: P.p.up }; });
+    check("作者あて：歌を全部見せて、詠んだ人を4人から選ぶ", A.ask.includes("詠んだのはだれ") && A.names.join() === A.au.join() && A.yomi.includes(A.up));
+    await q.click("#hint"); await q.waitForTimeout(80);
+    check("作者あて：ヒント1回目でまちがいの人を1人外す", await q.locator("#pick button.cut").count() === 1 && (await q.textContent("#hintbox")).includes("人を1つ外しました"));
+    const wv = await q.evaluate(() => { const c = __hy.cur(); return [0, 1, 2, 3].find((v) => v !== c.P.ans && !document.querySelector(`#pick button[data-v="${v}"]`).disabled); });
+    await q.click(`#pick button[data-v="${wv}"]`); await q.waitForTimeout(80);
+    check("作者あて：まちがえると、その人がどの歌の作者かを知らせる", /✕ ちがう。.+は\d+番「/.test(await q.textContent("#msg")));
+    await solve(q); await q.click("#next"); await q.waitForTimeout(100);
+    const B = await q.evaluate(() => { const P = __hy.cur().P; return { ask: document.querySelector(".ask").textContent, names: [...document.querySelectorAll("#pick button b")].map((b) => b.textContent), kima: P.opts.map((o) => o.kima + "…"), yomi: document.querySelector("#yomi").textContent, lo: P.p.lo, up: P.p.up }; });
+    check("決まり字あて：取り札（下の句）だけを見せて、決まり字を4つから選ぶ（上の句は取るまで見せない）", B.ask.includes("決まり字は") && B.names.join() === B.kima.join() && B.yomi.includes(B.lo) && !B.yomi.includes(B.up));
+    await solve(q);
+    check("決まり字あて：取ったら上の句も見せる", (await q.textContent("#yomi")).includes("上の句"));
+    await q.context().close();
+  }
   {
     // 引き継ぎコードなどで数の所に文字が入っても、画面に HTML として出さない
     const q = await newPage(); await closeHow(q);

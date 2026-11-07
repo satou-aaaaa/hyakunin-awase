@@ -84,6 +84,17 @@ button.sub:disabled{opacity:.45;cursor:default}
 .fuda button.cut{opacity:.4;border-style:dotted}
 .fuda button.yes{background:var(--green);border-color:var(--green2);color:#fff}.fuda button.yes .no{color:#fff}
 .fuda .x{position:absolute;right:6px;top:2px;font-size:16px;color:var(--red);font-weight:900}
+.names{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.names button{all:unset;box-sizing:border-box;cursor:pointer;position:relative;min-height:76px;border-radius:8px;background:#fff;border:4px solid var(--green);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:14px 6px;text-align:center;box-shadow:0 3px 0 #211c1626}
+.names button b{font-family:var(--f-title);font-weight:900;font-size:19px;line-height:1.3;overflow-wrap:anywhere}
+.names button small{font-size:12px;color:var(--ink2);font-weight:700;overflow-wrap:anywhere}
+.names button:active{transform:translateY(2px)}
+.names button:disabled{cursor:default}
+.names button.ng{opacity:.45;border-style:dashed}.names button.ng b{text-decoration:line-through}
+.names button.cut{opacity:.4;border-style:dotted}
+.names button.yes{background:var(--green);border-color:var(--green2);color:#fff}.names button.yes small{color:#fff}
+.names .x{position:absolute;right:6px;top:2px;font-size:16px;color:var(--red);font-weight:900}
+.names .cutl{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:11px;color:var(--ink2)}
 .fuda .cutl{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:11px;color:var(--ink2)}
 .msg{margin:0;min-height:22px;text-align:center;font-size:15px;font-weight:700}
 .msg.bad{color:var(--red)}
@@ -355,12 +366,11 @@ const freshFirst = (qs, s) => { const seen = (s && s.dex) || {}, nw = (q) => !se
 function endlessList(s, avoid, hard) {
   const salt = rid(), out = [], k = todayKey();
   const take = (lv, n) => {
-    const ids = freshFirst(G.POOL[lv], s), used = new Set(out.map((x) => noOf(x[1])));
-    // 同じ回の中では、なるべくまだ出していない歌から（使い切ったら同じ歌も出す）
-    ids.sort((a, b) => used.has(noOf(a)) - used.has(noOf(b)));
+    const ids = freshFirst(G.POOL[lv], s);
+    // 同じ回の中では、なるべくまだ出していない歌から（使い切ったら同じ歌も出す。1首に問題が2つある難しさもあるので、1問ごとに選び直す）
     for (let c = 0; c < n && ids.length; c++) {
-      const prev = out.length ? out[out.length - 1][1] : avoid, pn = prev && G.QBY[prev] ? noOf(prev) : -1;
-      let j = ids.findIndex((q) => noOf(q) !== pn); if (j < 0) j = 0;
+      const prev = out.length ? out[out.length - 1][1] : avoid, pn = prev && G.QBY[prev] ? noOf(prev) : -1, used = new Set(out.map((x) => noOf(x[1])));
+      let j = ids.findIndex((q) => noOf(q) !== pn && !used.has(noOf(q))); if (j < 0) j = ids.findIndex((q) => noOf(q) !== pn); if (j < 0) j = 0;
       out.push([lv, ids.splice(j, 1)[0]]);
     }
   };
@@ -592,7 +602,11 @@ const missOf = () => cur.wrong.length + cur.hints;
 const cutOf = (P) => { const w = P.opts.map((_, i) => i).filter((i) => i !== P.ans); return G.shuffled(w, G.rng(G.seedOf("cut:" + P.id))); };
 // 外す札の数：やさしいはヒント1回ごとに1枚、ふつう・むずかしいはヒント2回目で2枚（1回目は上の句を全部見せる）
 const cutLive = (P) => cutOf(P).filter((v) => !cur.wrong.includes(v));
-const cutN = (P, h) => (P.lv === 0 ? Math.min(2, h) : h >= 2 ? 2 : 0);
+// 作者あて（a）・決まり字あて（r）は、やさしいと同じく1回ごとに1つ外す
+const oneByOne = (P) => P.lv === 0 || P.kd === "a" || P.kd === "r";
+const cutN = (P, h) => (oneByOne(P) ? Math.min(2, h) : h >= 2 ? 2 : 0);
+const askOf = (P) => (P.kd === "a" ? "この歌を詠んだのはだれ？" : P.kd === "r" ? "この取り札の歌の決まり字は？" : "下の句の札はどれ？");
+const optSay = (P, v) => { const o = P.opts[v]; return P.kd === "a" ? `${v + 1}：${o.au}（${o.auk}）` : P.kd === "r" ? `${v + 1}：決まり字 ${o.kima}` : `札${v + 1}：${o.lh}`; };
 function play() {
   const s = load(), run = s.runs[MODE];
   if (!run) return home();
@@ -610,8 +624,9 @@ function play() {
         : `<div class="dots" aria-label="${i + 1}問目／${run.list.length}問">${run.list.map((_, j) => `<i class="${j < i ? "done" : j === i ? "on" : ""}"></i>`).join("")}</div><span style="font-size:.85rem;color:var(--ink2)">${label} ${i + 1}/${run.list.length}</span>`}
     </header>
     <div class="yomi" id="yomi" data-a11y-say></div>
-    <p class="ask" data-a11y-say>下の句の札はどれ？</p>
-    <div class="fuda" id="pick">${P.opts.map((p, v) => `<button data-v="${v}" aria-label="札${v + 1}：${esc(p.lh)}"><span class="no" aria-hidden="true">${v + 1}</span><span class="tx" aria-hidden="true">${fudaLines(p).map(esc).join("<br>")}</span></button>`).join("")}</div>
+    <p class="ask" data-a11y-say>${askOf(P)}</p>
+    ${P.kd === "a" || P.kd === "r" ? `<div class="names" id="pick">${P.opts.map((p, v) => `<button data-v="${v}" aria-label="${esc(optSay(P, v))}">${P.kd === "a" ? `<b>${esc(p.au)}</b><small>${esc(p.auk)}</small>` : `<b>${esc(p.kima)}…</b><small>${p.kima.length}字</small>`}</button>`).join("")}</div>`
+      : `<div class="fuda" id="pick">${P.opts.map((p, v) => `<button data-v="${v}" aria-label="札${v + 1}：${esc(p.lh)}"><span class="no" aria-hidden="true">${v + 1}</span><span class="tx" aria-hidden="true">${fudaLines(p).map(esc).join("<br>")}</span></button>`).join("")}</div>`}
     <p class="msg" id="msg" role="status" aria-live="polite" data-a11y-say></p>
     <div id="hintbox" data-a11y-say></div>
     ${hard ? "" : `<button class="sub" id="hint">ヒント</button>`}
@@ -627,7 +642,10 @@ function play() {
 function paint() {
   const P = cur.P, p = P.p, full = P.lv === 0 || cur.done || cur.hints >= 1, cut = cur.done ? [] : cutLive(P).slice(0, cutN(P, cur.hints));
   // 読み札：やさしいは上の句を全部。ふつう・むずかしいは決まり字だけ（残りは「…」）。ヒント1回目か、取ったあとは全部
-  $("yomi").innerHTML = `<span class="lb">読み札</span>` + (full
+  // 作者あては歌を全部。決まり字あては取り札（下の句）だけ（取ったあとは上の句も）
+  if (P.kd === "a") $("yomi").innerHTML = `<span class="lb">歌</span><p class="k">${esc(p.up)}<br>${esc(p.lo)}</p><p class="kana">${esc(p.uh)}　${esc(p.lh)}</p>`;
+  else if (P.kd === "r") $("yomi").innerHTML = `<span class="lb">取り札</span><p class="k">${esc(p.lo)}</p><p class="kana">${esc(p.lh)}</p>${cur.done ? `<p class="kana">上の句：${esc(p.uh)}</p>` : ""}`;
+  else $("yomi").innerHTML = `<span class="lb">読み札</span>` + (full
     ? `<p class="k">${esc(p.up)}</p><p class="kana">${esc(p.uh)}</p>`
     : `<p class="kima" aria-label="決まり字：${esc(p.kima)}">${esc(p.kima)}<span aria-hidden="true">…</span></p><p class="kana">決まり字（${p.kn}字）だけ読みます</p>`);
   document.querySelectorAll("#pick button").forEach((b) => {
@@ -635,12 +653,13 @@ function paint() {
     b.disabled = cur.done || w || c; b.classList.toggle("ng", w); b.classList.toggle("cut", c && !w); b.classList.toggle("yes", cur.done && v === P.ans);
     if (w && !b.querySelector(".x")) b.insertAdjacentHTML("afterbegin", '<span class="x" aria-hidden="true">✕</span>');
     const cl = b.querySelector(".cutl"); if (c && !w && !cl) b.insertAdjacentHTML("beforeend", '<span class="cutl" aria-hidden="true">ヒントで外した</span>'); else if (!(c && !w) && cl) cl.remove();
-    b.setAttribute("aria-label", `札${v + 1}：${P.opts[v].lh}${w ? "（ちがう）" : c && !w ? "（ヒントで外した）" : ""}`);
+    b.setAttribute("aria-label", `${optSay(P, v)}${w ? "（ちがう）" : c && !w ? "（ヒントで外した）" : ""}`);
   });
   const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= 2 || (!cur.P.input && cutLive(cur.P).length <= cutN(cur.P, cur.hints)); h.hidden = cur.done; }
   const tips = [];
-  if (cur.hints >= 1) tips.push(P.lv === 0 ? "まちがいの札を1枚外しました。" : "上の句を全部見せました。");
-  if (cur.hints >= 2) tips.push(P.lv === 0 ? "もう1枚外しました。残りは2枚。" : "まちがいの札を2枚外しました。残りは2枚。");
+  const one = P.lv === 0 ? "札" : P.kd === "a" ? "人" : "決まり字";
+  if (cur.hints >= 1) tips.push(P.lv === 0 ? "まちがいの札を1枚外しました。" : oneByOne(P) ? `まちがいの${one}を1つ外しました。` : "上の句を全部見せました。");
+  if (cur.hints >= 2) tips.push(P.lv === 0 ? "もう1枚外しました。残りは2枚。" : oneByOne(P) ? "もう1つ外しました。残りは2つ。" : "まちがいの札を2枚外しました。残りは2枚。");
   $("hintbox").innerHTML = tips.length && !cur.done ? `<div class="hint" role="status">💡 ${tips.join("<br>💡 ")}</div>` : "";
 }
 function hint() { if (cur.done || cur.hints >= 2 || (!cur.P.input && cutLive(cur.P).length <= cutN(cur.P, cur.hints))) return; cur.hints++; keep(); paint(); }
@@ -652,7 +671,8 @@ function choose(v) {
     buzz(40);
     cur.wrong.push(v); keep(); paint();
     const msg = $("msg"); msg.className = "msg bad";
-    msg.textContent = `✕ ちがう。それは${P.opts[v].no}番の下の句。`;
+    const o = P.opts[v];
+    msg.textContent = P.kd === "a" ? `✕ ちがう。${o.au}は${o.no}番「${o.up}」の作者。` : P.kd === "r" ? `✕ ちがう。「${o.kima}」は${o.no}番「${o.lo}」の決まり字。` : `✕ ちがう。それは${o.no}番の下の句。`;
     return;
   }
   // 正解
