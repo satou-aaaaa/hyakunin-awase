@@ -374,13 +374,23 @@ function practiceList(s, lv, fam) {
   const ids = freshFirst(pool, s).slice(0, 5), salt = rid(), k = todayKey();
   return ids.map((id, i) => `${lv}:${id}|p${k}.${salt}.${i}`);
 }
+// にがて復習：まちがえた・ヒントを使った問題を、回数の多い順に5問（足りなければまだの問題で補う）。一度でまちがいなしに当てると外れる
+const NGMAX = 60;
+const ngIds = (s) => Object.keys(s.ng).filter((q) => has(G.QBY, q) && s.ng[q] > 0).sort((a, b) => s.ng[b] - s.ng[a] || (a < b ? -1 : 1));
+function reviewList(s) {
+  const k = todayKey(), salt = rid(), ids = ngIds(s).slice(0, 5);
+  for (const lv of [0, 1, 2]) for (const q of freshFirst(G.POOL[lv], s)) { if (ids.length >= 5) break; if (!ids.includes(q)) ids.push(q); }
+  return ids.map((id, i) => `${G.QBY[id].lv}:${id}|p${k}.${salt}.r${i}`);
+}
+const ngBtn = () => { const n = ngIds(load()).length; return n ? `<button class="sub" id="go-r">にがて復習 <small>まちがえた問題 ${n}問</small></button>` : ""; };
+const bindNg = () => { const b = $("go-r"); if (b) b.onclick = () => startRun("p", { review: true }); };
 const starsOf = (m) => (m === 0 ? 3 : m === 1 ? 2 : 1); // m = まちがい＋ヒントの数
 const starStr = (n) => `<span class="stars" aria-label="星${n}つ">${"★".repeat(n)}<span class="off">${"☆".repeat(3 - n)}</span></span>`;
 
 // ---- 記録（この端末の localStorage だけ）----
 // days/hdays/adays：日付 → { m:[1問ごとのまちがい＋ヒント] }。adays はあとから遊んだ日（続けた日・今日の記録・Ko-fi には数えない）
 // dex：歌番号 → 当てた数（歌の帳）。runs：モードごとの途中経過（練習で今日・上級の途中を消さない）。tm：むずかしいを当てた数
-const fresh = () => ({ v: 1, days: {}, hdays: {}, adays: {}, dex: {}, runs: {}, tut: false, kofi: {}, ach: {}, ebest: 0, tm: 0 });
+const fresh = () => ({ v: 1, days: {}, hdays: {}, adays: {}, dex: {}, runs: {}, tut: false, kofi: {}, ach: {}, ebest: 0, tm: 0, ng: {} });
 let MODE = "d";
 let mem = null; // 保存できない環境では、開いているあいだだけここに置く
 const doneOf = (r) => !!r && Array.isArray(r.res) && Array.isArray(r.list) && r.res.length >= r.list.length, recOf = (r) => ({ m: r.res.map((x) => x.m) });
@@ -388,7 +398,7 @@ const runKey = (mode, date) => (mode === "a" ? "a:" + date : mode);
 const bookOf = (s, m) => (m === "d" ? s.days : m === "h" ? s.hdays : m === "a" ? s.adays : null);
 // 終わった回を日ごとの記録に入れる（結果を見る前に閉じても、終えた日を失わない）
 function bank(s, r) { const b = doneOf(r) ? bookOf(s, r.mode) : null; if (!b || b[r.date] || (r.mode === "a" && s.days[r.date])) return false; b[r.date] = recOf(r); return true; }
-const BOXES = ["days", "hdays", "adays", "dex", "runs", "kofi", "ach"];
+const BOXES = ["days", "hdays", "adays", "dex", "runs", "kofi", "ach", "ng"];
 // 保存に失敗したあとはメモリと保存の両方を読む。合わせる前に両方を fresh() で補う。数は高いほう、途中経過は同じ回なら進んだほう
 function load() {
   let a = null, b = null;
@@ -428,6 +438,9 @@ function tidy(s) {
   s.ebest = num(s.ebest); s.tm = num(s.tm);
   for (const q of BOXES) if (!s[q] || typeof s[q] !== "object" || Array.isArray(s[q])) s[q] = {};
   for (const k in s.dex) { if (!has(G.BY, k)) delete s.dex[k]; else s.dex[k] = num(s.dex[k]); }
+  // ng：まちがえた・ヒントを使った問題 → その回数（にがて復習）。多すぎるときは回数の多いほうを残す
+  for (const k in s.ng) { if (!has(G.QBY, k) || !num(s.ng[k])) delete s.ng[k]; else s.ng[k] = num(s.ng[k]); }
+  { const ks = Object.keys(s.ng); if (ks.length > NGMAX) ks.sort((a, b) => s.ng[a] - s.ng[b]).slice(0, ks.length - NGMAX).forEach((k) => delete s.ng[k]); }
   const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0);
   for (const [b, n] of [[s.days, NQ.d], [s.hdays, NQ.h], [s.adays, NQ.d]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
@@ -519,6 +532,7 @@ function home() {
     <button class="main" id="go-d">${done ? "今日の結果を見る" : rd ? `続きから（${rd.res.length + 1}問目）` : `今日の5問 <small>第${dayNo(k)}回</small>`}</button>
     <button class="main alt" id="go-e">${re ? `とことんの続きから（${re.res.length + 1}枚目）` : "とことん：何枚続けて取れる？"}${s.ebest ? ` <small>自己ベスト ${s.ebest}枚</small>` : ""}</button>
     <button class="sub" id="go-h">${hdone ? "上級の結果を見る" : rh ? "上級の続きから" : "上級：決まり字だけで3問（ヒントなし）"}</button>
+    ${ngBtn()}
     <div class="row"><button class="sub" id="go-p">練習（何度でも）</button><button class="sub" id="go-dex">歌の帳 ${nf}/${G.IDS.length}</button></div>
     <div class="row"><button class="sub" id="go-cal" aria-label="カレンダー${late.length ? `（あとから遊べる日 ${late.length}）` : ""}">カレンダー${late.length ? ` <span class="badge">▶${late.length}</span>` : ""}</button><button class="sub" id="go-ach">実績 ${ag}/${ACH.length}</button></div>
     <div class="stats"><div><b>${playedDays(s)}</b><small>遊んだ日</small></div><div><b>${nf}</b><small>集めた歌</small></div><div><b>${st >= 1 ? st : "—"}</b><small>${st >= 1 ? "続けて" : "続けた日"}</small></div></div>
@@ -527,6 +541,7 @@ function home() {
   $("go-h").onclick = () => (k !== todayKey() ? home() : hdone ? result("h", k) : startRun("h"));
   $("go-e").onclick = () => startRun("e");
   $("go-p").onclick = () => practiceMenu();
+  bindNg();
   $("go-dex").onclick = () => book();
   $("go-cal").onclick = () => cal();
   $("go-ach").onclick = achView;
@@ -557,7 +572,7 @@ function startRun(mode, opt) {
     if (mode === "e") { if (s.runs.e) return; s.runs.e = { mode, date: k, list: endlessList(s, s.elast), res: [], miss: 0, cur: null, id: rid() }; return; }
     if (mode !== "p" && s.runs[mode] && s.runs[mode].date === k) return; // 続きから
     if ((mode === "d" && s.days[k]) || (mode === "h" && s.hdays[k])) return; // 別のタブで今日の分を終えていたら、もう一度は始めない
-    const list = mode === "p" ? practiceList(s, opt.lv, opt.fam) : listOf(mode, k);
+    const list = mode === "p" ? (opt && opt.review ? reviewList(s) : practiceList(s, opt.lv, opt.fam)) : listOf(mode, k);
     if (s.runs[mode]) bank(s, s.runs[mode]); // 前の回が終わっていたら記録に残してから替える
     s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid() };
   });
@@ -576,6 +591,7 @@ const missOf = () => cur.wrong.length + cur.hints;
 // ヒントで外す札：まちがいの札のうち、問題の id から決まる順に（だれでも同じ）
 const cutOf = (P) => { const w = P.opts.map((_, i) => i).filter((i) => i !== P.ans); return G.shuffled(w, G.rng(G.seedOf("cut:" + P.id))); };
 // 外す札の数：やさしいはヒント1回ごとに1枚、ふつう・むずかしいはヒント2回目で2枚（1回目は上の句を全部見せる）
+const cutLive = (P) => cutOf(P).filter((v) => !cur.wrong.includes(v));
 const cutN = (P, h) => (P.lv === 0 ? Math.min(2, h) : h >= 2 ? 2 : 0);
 function play() {
   const s = load(), run = s.runs[MODE];
@@ -609,7 +625,7 @@ function play() {
   toTop();
 }
 function paint() {
-  const P = cur.P, p = P.p, full = P.lv === 0 || cur.done || cur.hints >= 1, cut = cur.done ? [] : cutOf(P).slice(0, cutN(P, cur.hints));
+  const P = cur.P, p = P.p, full = P.lv === 0 || cur.done || cur.hints >= 1, cut = cur.done ? [] : cutLive(P).slice(0, cutN(P, cur.hints));
   // 読み札：やさしいは上の句を全部。ふつう・むずかしいは決まり字だけ（残りは「…」）。ヒント1回目か、取ったあとは全部
   $("yomi").innerHTML = `<span class="lb">読み札</span>` + (full
     ? `<p class="k">${esc(p.up)}</p><p class="kana">${esc(p.uh)}</p>`
@@ -621,13 +637,13 @@ function paint() {
     const cl = b.querySelector(".cutl"); if (c && !w && !cl) b.insertAdjacentHTML("beforeend", '<span class="cutl" aria-hidden="true">ヒントで外した</span>'); else if (!(c && !w) && cl) cl.remove();
     b.setAttribute("aria-label", `札${v + 1}：${P.opts[v].lh}${w ? "（ちがう）" : c && !w ? "（ヒントで外した）" : ""}`);
   });
-  const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= 2; h.hidden = cur.done; }
+  const h = $("hint"); if (h) { h.disabled = cur.done || cur.hints >= 2 || (!cur.P.input && cutLive(cur.P).length <= cutN(cur.P, cur.hints)); h.hidden = cur.done; }
   const tips = [];
   if (cur.hints >= 1) tips.push(P.lv === 0 ? "まちがいの札を1枚外しました。" : "上の句を全部見せました。");
   if (cur.hints >= 2) tips.push(P.lv === 0 ? "もう1枚外しました。残りは2枚。" : "まちがいの札を2枚外しました。残りは2枚。");
   $("hintbox").innerHTML = tips.length && !cur.done ? `<div class="hint" role="status">💡 ${tips.join("<br>💡 ")}</div>` : "";
 }
-function hint() { if (cur.done || cur.hints >= 2) return; cur.hints++; keep(); paint(); }
+function hint() { if (cur.done || cur.hints >= 2 || (!cur.P.input && cutLive(cur.P).length <= cutN(cur.P, cur.hints))) return; cur.hints++; keep(); paint(); }
 function choose(v) {
   if (cur.done || cur.wrong.includes(v)) return;
   if (!same(load().runs[MODE])) { toast("別の画面で先に進んでいます"); return play(); }
@@ -642,7 +658,7 @@ function choose(v) {
   // 正解
   cur.done = true; buzz([10, 40, 10]);
   // 別のタブで使ったヒント・まちがいも数えてから採点する（keep と同じ合わせ方）
-  const s = save((s) => { const r = s.runs[MODE]; if (!same(r)) return; merge(r); r.res.push({ m: missOf() }); r.cur = null; if (r.mode === "e") { r.miss = (r.miss || 0) + missOf(); s.elast = P.id; } s.dex[p.no] = (s.dex[p.no] || 0) + 1; if (P.lv === 2) s.tm = (s.tm || 0) + 1; });
+  const s = save((s) => { const r = s.runs[MODE]; if (!same(r)) return; merge(r); r.res.push({ m: missOf() }); r.cur = null; if (r.mode === "e") { r.miss = (r.miss || 0) + missOf(); s.elast = P.id; } s.dex[p.no] = (s.dex[p.no] || 0) + 1; if (P.lv === 2) s.tm = (s.tm || 0) + 1; if (missOf() > 0) s.ng[P.id] = (s.ng[P.id] || 0) + 1; else delete s.ng[P.id]; });
   const r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length, st = starsOf(missOf());
   paint();
   $("msg").className = "msg ok"; $("msg").textContent = `✓ 取った！ ${p.no}番。${fin ? "「結果を見る」" : "「次の問題へ」"}で進みます。`; // 前からある知らせの場所で読ませる（入れたばかりの role=status は読まれないことがある）
@@ -681,9 +697,10 @@ function endFinish(run) {
     <p class="note" id="ebest">${best ? "🎉 自己ベスト更新！" : `自己ベスト ${s.ebest}枚${s.ebest > n ? `（あと${s.ebest - n + 1}枚で更新）` : ""}`}<br>まちがい・ヒント ${miss}回</p>
     ${newAch.length ? `<p class="achnew" id="achnew">${newAch.map((id) => `🏅 実績：${ACH.find((a) => a[0] === id)[1]}`).join("<br>")}</p>` : ""}
     <button class="main" id="go-e">もう一度とことん</button>
+    ${ngBtn()}
     <div class="row"><button class="sub" id="go-p">練習する</button><button class="sub" id="go-dex">歌の帳を見る</button></div>
     <p class="note"><a href="${FEEDBACK}" target="_blank" rel="noopener">感想を送る</a></p>`;
-  $("back").onclick = home; $("go-e").onclick = () => startRun("e"); $("go-p").onclick = () => practiceMenu(); $("go-dex").onclick = () => book();
+  $("back").onclick = home; $("go-e").onclick = () => startRun("e"); $("go-p").onclick = () => practiceMenu(); bindNg(); $("go-dex").onclick = () => book();
   toTop();
 }
 // 共有の文：歌・答えは出さない。まちがい＋ヒントの数で色と形を変える（色だけで分けない）
@@ -709,10 +726,11 @@ function result(mode, k, first, prec, newAch = []) {
     <p class="note">🟢まちがいなし　🔶1回　🔺2回以上<br>次の5問まで あと <b>${untilNext()}</b></p>` : ""}
     <button class="main alt" id="go-e">続けて遊ぶ：とことん${s.ebest ? `（ベスト ${s.ebest}問）` : ""}</button>
     ${mode === "d" && k === todayKey() && !s.hdays[k] ? `<button class="sub" id="go-h">上級：決まり字だけで3問</button>` : ""}
+    ${ngBtn()}
     <div class="row"><button class="sub" id="go-p">練習する</button><button class="sub" id="go-dex">歌の帳を見る</button></div>
     ${showKofi ? `<p class="note kofi">楽しめたら、<a href="https://ko-fi.com/satouaaaaa" target="_blank" rel="noopener">Ko-fi でコーヒー1杯の応援</a>をもらえると、新しいゲームづくりの励みになります（任意・遊ぶのはずっと無料）。</p>` : ""}
     <p class="note"><a href="${FEEDBACK}" target="_blank" rel="noopener">感想を送る</a></p>`;
-  $("back").onclick = home; $("go-p").onclick = () => practiceMenu(); $("go-dex").onclick = () => book();
+  $("back").onclick = home; $("go-p").onclick = () => practiceMenu(); bindNg(); $("go-dex").onclick = () => book();
   $("go-e").onclick = () => startRun("e");
   if ($("go-h")) $("go-h").onclick = () => (k === todayKey() ? startRun("h") : home());
   if ($("go-cal")) $("go-cal").onclick = () => cal(k.slice(0, 7));
