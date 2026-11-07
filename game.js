@@ -9,7 +9,9 @@
 
   // 読む音：歴史的仮名づかいを、読み上げるときの音にそろえる（を→お、ゐ→い、ゑ→え、ぢ→じ、づ→ず、句のはじめ以外のは行→わ行）。1字は1字のまま
   const M = { ゐ: "い", ゑ: "え", を: "お", ぢ: "じ", づ: "ず" }, H = { は: "わ", ひ: "い", ふ: "う", へ: "え", ほ: "お" };
-  const sound = (kana) => kana.split(" ").map((ph) => { const t = [...ph].map((c) => M[c] || c).join(""); return t[0] + [...t.slice(1)].map((c) => H[c] || c).join(""); }).join("");
+  // のばす音：句のはじめの「あう」「おう」は「おー」と読み、「おほ（おお）」と同じに聞こえる（44番「あふことの」は「おうことの」。競技かるたで「あふこ」の3字決まり）
+  const LONG = (t) => t.replace(/^[あお]う/, "おお");
+  const sound = (kana) => kana.split(" ").map((ph) => { const t = [...ph].map((c) => M[c] || c).join(""); return LONG(t[0] + [...t.slice(1)].map((c) => H[c] || c).join("")); }).join("");
 
   const POEMS = UTA.map((u, i) => ({ no: i + 1, au: u[0], auk: u[1], up: u[2], lo: u[3], uh: u[4], lh: u[5], snd: sound(u[4]) }));
   for (const p of POEMS) {
@@ -63,6 +65,8 @@
       const t = p.tomo.map((n) => BY[n]);
       out.push(`「${p.kima.slice(0, -1)}」までは ${t.length + 1}首が同じ音。${p.kn}字目の「${p.kima.slice(-1)}」で分かれる（${p.kn}字決まり）。`);
       // 同じ音の歌が多いとき（「あ」で始まる16首など）は、数だけ言う（一画面一問）
+      // 書き方はちがうが、読むと同じ音の歌（「あふ」と「おほ」）
+      if (t.some((x) => x.kima.slice(0, p.kn - 1) !== p.kima.slice(0, p.kn - 1))) out.push("「あふ」は「おう」と読み、のばして「おー」。「おほ（おお）」と同じ音に聞こえる。");
       out.push(t.length <= 4 ? "同じ音の歌：" + t.map((x) => `${x.no}番「${x.kima}…」`).join("・") : `同じ音の歌はほかに${t.length}首。決まり字まで聞けば1首に決まる。`);
     }
     return out;
