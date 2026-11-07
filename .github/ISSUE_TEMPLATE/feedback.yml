@@ -28,13 +28,13 @@ body:
     id: good
     attributes:
       label: よかった所
-      placeholder: 例）広告が本物っぽくて、どきっとした
+      placeholder: 例）決まり字だけで取れたとき、うれしかった
     validations:
       required: false
   - type: textarea
     id: fix
     attributes:
       label: 直してほしい所
-      placeholder: 例）3つめの記事がむずかしすぎる／ボタンが押しにくい
+      placeholder: 例）むずかしいの問題が多すぎる／札の字が小さい
     validations:
       required: false

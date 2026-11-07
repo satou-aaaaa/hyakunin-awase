@@ -2,7 +2,7 @@
 // uta.tsv の列：歌番号・作者・作者の読み・上の句・下の句・上の句のかな・下の句のかな（かなは歴史的仮名づかい。句の間は半角の空白）
 // 本文は Wikisource「小倉百人一首」と小倉山荘「百人一首」の解説で照らし合わせた（AGENTS.md）。
 const fs = require("fs"), path = require("path");
-const rows = fs.readFileSync(path.join(__dirname, "uta.tsv"), "utf8").trim().split("\n").map((l) => l.split("\t"));
+const rows = fs.readFileSync(path.join(__dirname, "uta.tsv"), "utf8").replace(/\r/g, "").trim().split("\n").map((l) => l.split("\t"));
 if (rows.length !== 100) throw new Error("100首ではない：" + rows.length);
 const out = rows.map((r, i) => {
   if (r.length < 7 || +r[0] !== i + 1) throw new Error("形がちがう行 " + (i + 1));

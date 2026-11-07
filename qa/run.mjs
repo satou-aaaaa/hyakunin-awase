@@ -19,11 +19,12 @@ const req = createRequire(import.meta.url);
 const UTA = req(path.join(root, "data.js"));
 const G = req(path.join(root, "game.js"));
 const idOf = (t) => t.split("|")[0].split(":")[1];
+{ let ng = false; try { G.make("0:t2|x2026-11-07"); } catch (e) { ng = true; } check("難しさと問題の合わないタグは作らない", ng); }
 
 // ---- 1. 歌のデータと決まり字（ブラウザを使わない）----
 {
-  const tsv = readFileSync(path.join(root, "tools/uta.tsv"), "utf8").trim().split("\n").map((l) => l.split("\t"));
-  check("data.js は tools/uta.tsv から作ったまま（手で直していない）", UTA.length === 100 && tsv.every((r, i) => +r[0] === i + 1 && JSON.stringify(r.slice(1, 7)) === JSON.stringify(UTA[i])));
+  const tsv = readFileSync(path.join(root, "tools/uta.tsv"), "utf8").replace(/\r/g, "").trim().split("\n").map((l) => l.split("\t"));
+  check("data.js は tools/uta.tsv から作ったまま（手で直していない）", UTA.length === 100 && tsv.length === 100 && tsv.every((r, i) => +r[0] === i + 1 && JSON.stringify(r.slice(1, 7)) === JSON.stringify(UTA[i])));
   // かなの音の数：小さい「ゃゅょ」は前の字と合わせて1つ。5・7・5・7・7（字余りは1つまで）
   const mora = (s) => [...s].filter((c) => !"ゃゅょ".includes(c)).length, bad = [];
   UTA.forEach((u, i) => {
@@ -201,6 +202,16 @@ try {
   await p.click("#go-d");
   const tags = await p.evaluate(() => __hy.load().runs.d.list);
   check("今日の5問は日付から決まる（game.js の dailyTags と同じ）", JSON.stringify(tags) === JSON.stringify(G.dailyTags(TODAY)));
+  {
+    // 記録を直されたとき：遠い先の日の回・並びを変えた今日の5問は読まない（問題づくりで止まらない）
+    const r = await p.evaluate(() => { const raw = localStorage.getItem(__hy.KEY), o = JSON.parse(raw), d = o.runs.d;
+      o.runs.h = Object.assign({}, d, { mode: "h", date: "9999-12-31", list: __hy.G.hardTags(__hy.EPOCH) });
+      o.runs.e = Object.assign({}, d, { mode: "e", date: "2000-01-01" });
+      localStorage.setItem(__hy.KEY, JSON.stringify(o)); const a = __hy.load();
+      const o2 = JSON.parse(raw); o2.runs.d.list = o2.runs.d.list.slice().reverse(); localStorage.setItem(__hy.KEY, JSON.stringify(o2)); const b = __hy.load();
+      localStorage.setItem(__hy.KEY, raw); return [!!a.runs.h, !!a.runs.e, !!a.runs.d, !!b.runs.d]; });
+    check("遠い先・第1回より前の日の回と、並びを変えた今日の5問は読まない", JSON.stringify(r) === "[false,false,true,false]", JSON.stringify(r));
+  }
   {
     const P0 = G.make(tags[0]);
     const say = await p.$$eval("[data-a11y-say]", (e) => e.map((x) => x.getAttribute("aria-label") || x.textContent).join(" "));

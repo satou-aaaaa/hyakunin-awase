@@ -13,6 +13,7 @@
 
   const POEMS = UTA.map((u, i) => ({ no: i + 1, au: u[0], auk: u[1], up: u[2], lo: u[3], uh: u[4], lh: u[5], snd: sound(u[4]) }));
   for (const p of POEMS) {
+    if (POEMS.some((q) => q !== p && q.snd === p.snd)) throw new Error("同じ読みの歌がある " + p.no); // 決まり字を数えられない（止まらないように）
     let n = 1; while (POEMS.some((q) => q !== p && q.snd.slice(0, n) === p.snd.slice(0, n))) n++;
     p.kn = n; p.kima = p.uh.replace(/ /g, "").slice(0, n); // 決まり字（札に書かれた字のまま）
     p.tomo = n > 1 ? POEMS.filter((q) => q !== p && q.snd.slice(0, n - 1) === p.snd.slice(0, n - 1)).map((q) => q.no) : []; // 友札：決まり字の1つ前まで同じ歌
@@ -50,7 +51,7 @@
   }
   // 1問：tag は「難しさ:問題の id|モードと日付…」
   function make(tag) {
-    const m = String(tag).match(/^([012]):([a-z0-9]+)\|/); if (!m || !QBY[m[2]]) throw new Error("知らない問題 " + tag);
+    const m = String(tag).match(/^([012]):([a-z0-9]+)\|/); if (!m || !QBY[m[2]] || QBY[m[2]].lv !== +m[1]) throw new Error("知らない問題 " + tag);
     const q = QBY[m[2]], opts = optsOf(q.id);
     return { tag, lv: q.lv, id: q.id, p: BY[q.no], opts: opts.map((n) => BY[n]), ans: opts.indexOf(q.no) };
   }

@@ -340,6 +340,7 @@ const G = window.HYAKUNIN, LV = G.LV, EPOCH = G.EPOCH;
 const jstNow = () => new Date(Date.now() + 9 * 3600e3);
 const todayKey = () => jstNow().toISOString().slice(0, 10);
 const dayNo = (k) => G.dayIdx(k) + 1;
+const nextDay = (k) => new Date(Date.parse(k) + 864e5).toISOString().slice(0, 10);
 const prevDay = (k) => new Date(Date.parse(k) - 864e5).toISOString().slice(0, 10);
 const md = (k) => `${+k.slice(5, 7)}/${+k.slice(8, 10)}`;
 const listOf = (mode, date) => (mode === "h" ? G.hardTags(date) : G.dailyTags(date));
@@ -411,7 +412,7 @@ function load() {
     if (x === undefined || y === undefined) { if (x || y) s.runs[m] = x || y; continue; }
     if (!x || !y) { const r = x || y; if (!r || bank(s, r) || doneOf(r)) continue; const bd = bookOf(s, r.mode); if (bd && !bd[r.date]) s.runs[m] = r; continue; }
     if (x.id !== y.id && x.date !== y.date) { const [w, l] = x.date > y.date ? [x, y] : [y, x]; bank(s, l); s.runs[m] = w; }
-    else if (x.id === y.id) { const px = prog(x), py = prog(y); s.runs[m] = px > py ? x : py > px ? y : n.runs[m]; }
+    else if (x.id === y.id) { const px = prog(x), py = prog(y); const w = px > py ? x : py > px ? y : n.runs[m]; s.runs[m] = w; if (w && w.cur && x.cur && y.cur && x.res.length === y.res.length) w.cur.wrong = [...new Set([...(x.cur.wrong || []), ...(y.cur.wrong || [])])]; }
   }
   return tidy(s);
 }
@@ -431,7 +432,7 @@ function tidy(s) {
   for (const [b, n] of [[s.days, NQ.d], [s.hdays, NQ.h], [s.adays, NQ.d]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
-    if (typeof r !== "object" || !okDate(r.date) || (m === "a:" + r.date ? r.mode !== "a" : !["d", "h", "p", "e"].includes(m) || r.mode !== m) || !Array.isArray(r.list) || !r.list.length || (NQL[r.mode] && r.list.length !== NQL[r.mode]) || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
+    if (typeof r !== "object" || !okDate(r.date) || (m === "a:" + r.date ? r.mode !== "a" : !["d", "h", "p", "e"].includes(m) || r.mode !== m) || !Array.isArray(r.list) || !r.list.length || (NQL[r.mode] && r.list.length !== NQL[r.mode]) || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0) || r.date < EPOCH || r.date > nextDay(todayKey()) || ((r.mode === "d" || r.mode === "a") && r.list.join() !== G.dailyTags(r.date).join()) || (r.mode === "h" && r.list.join() !== G.hardTags(r.date).join())) { delete s.runs[m]; continue; } // 日付は第1回〜あしたまで（遠い先の日で問題づくりを止めない）・今日の5問と上級は決まった並びだけ
     if (r.cur != null && (typeof r.cur !== "object" || !Array.isArray(r.cur.wrong))) r.cur = null;
     else if (r.cur) { r.cur.hints = Math.min(2, num(r.cur.hints)); r.cur.wrong = r.cur.wrong.filter((w) => w === 0 || w === 1 || w === 2 || w === 3); }
   }
@@ -439,7 +440,7 @@ function tidy(s) {
   return s;
 }
 // 保存の前に読み直す（別のタブで進めた記録を消さない）
-function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), (s.t || 0) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; } return s; }
+function save(fn) { const s = load(); fn(s); s.t = Math.max(Date.now(), num(s.t) + 1); const j = JSON.stringify(s); try { localStorage.setItem(KEY, j); mem = null; } catch (e) { mem = j; } return s; }
 function streak(days) { let k = todayKey(), n = 0; if (!days[k]) k = prevDay(k); while (days[k]) { n++; k = prevDay(k); } return n; }
 const playedDays = (s) => new Set([...Object.keys(s.days), ...Object.keys(s.adays)]).size;
 const foundOf = (s) => Object.keys(s.dex).filter((k) => s.dex[k] > 0);
@@ -557,6 +558,7 @@ function startRun(mode, opt) {
     if (mode !== "p" && s.runs[mode] && s.runs[mode].date === k) return; // 続きから
     if ((mode === "d" && s.days[k]) || (mode === "h" && s.hdays[k])) return; // 別のタブで今日の分を終えていたら、もう一度は始めない
     const list = mode === "p" ? practiceList(s, opt.lv, opt.fam) : listOf(mode, k);
+    if (s.runs[mode]) bank(s, s.runs[mode]); // 前の回が終わっていたら記録に残してから替える
     s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid() };
   });
   if (ng) return cal();
