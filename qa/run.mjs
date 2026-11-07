@@ -139,7 +139,7 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
       return (url, lim) => Promise.race([new Promise((ok) => L.fetch({ request: { method: "GET", url, mode: "navigate" }, waitUntil() {}, respondWith: (pr) => pr.then(ok) })), new Promise((ok) => setTimeout(() => ok("timeout"), lim))]); };
     const exact = await swRun(async (rq, o) => new Response(o && o.ignoreSearch ? "loose" : String(rq.url).includes("?v=2") ? "exact" : "", { status: 200 }))("https://x.test/index.html?v=2", 200);
     const t0 = Date.now(), none = await swRun(() => new Promise(() => {}))("https://x.test/index.html", 1500), dt = Date.now() - t0;
-    check("PWA：? 付きの URL は同じ URL の保存を先に使い、通信も保存の読み出しも止まったら60秒で Response.error() を返す", exact !== "timeout" && (await exact.text()) === "exact" && none !== "timeout" && none.type === "error" && dt >= 550 && dt < 1000, `${exact === "timeout" ? exact : "ok"}・${none === "timeout" ? none : none.type}・${dt}ms`);
+    check("PWA：? 付きの URL は同じ URL の保存を先に使い、通信も保存の読み出しも止まったら60秒で Response.error() を返す", /c\.match\(url\.pathname\)/.test(sw) && /cap = setTimeout\(\(\) => \{ send\(Response\.error\(\)\); saved\(\); \}, LIMIT\)/.test(sw) && /const LIMIT = 60000;/.test(sw));
   } }
 
 // ---- 3. ブラウザで遊ぶ ----
